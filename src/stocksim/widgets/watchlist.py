@@ -1,31 +1,68 @@
-
 from __future__ import annotations
 
 from textual.widgets import DataTable
 
-from ..stocks import STOCKS
+from ..stocks import STOCKS, Stock
+
+_STOCK_INDEX: dict[str, int] = {s.symbol: i for i, s in enumerate(STOCKS)}
+
+
+def _symbol_label(symbol: str, favorites: set[str], hot_ticker: str | None) -> str:
+    if symbol in favorites:
+        return f"★ {symbol}"
+    if hot_ticker is not None and symbol == hot_ticker:
+        return f"🔥 {symbol}"
+    return symbol
+
+
+def _sorted_stocks(favorites: set[str]) -> list[Stock]:
+    return sorted(
+        STOCKS,
+        key=lambda s: (0 if s.symbol in favorites else 1, _STOCK_INDEX[s.symbol]),
+    )
 
 
 class WatchlistTable(DataTable):
-
     def __init__(self) -> None:
         super().__init__(zebra_stripes=True, cursor_type="row", id="watchlist")
-        self._row_keys: dict[str, str] = {}
+        self._favorites: set[str] = set()
+        self._hot_ticker: str | None = None
 
     def on_mount(self) -> None:
-        self.add_column("Symbol", width=7, key="symbol")
+        self.add_column("Symbol", width=10, key="symbol")
         self.add_column("Price", width=11, key="price")
         self.add_column("Δ%", width=8, key="delta")
         self.add_column("Sector", width=12, key="sector")
-        for stock in STOCKS:
-            key = self.add_row(
-                stock.symbol,
+        for stock in _sorted_stocks(self._favorites):
+            self.add_row(
+                _symbol_label(stock.symbol, self._favorites, self._hot_ticker),
                 f"${stock.seed_price:,.2f}",
                 "+0.00%",
                 stock.sector,
                 key=stock.symbol,
             )
-            self._row_keys[stock.symbol] = str(key)
+
+    def rebuild(self, favorites: set[str], hot_ticker: str | None) -> None:
+        if favorites == self._favorites and hot_ticker == self._hot_ticker:
+            return
+        prev_symbol = self.selected_symbol
+        self._favorites = set(favorites)
+        self._hot_ticker = hot_ticker
+        self.clear()
+        ordered = _sorted_stocks(self._favorites)
+        for stock in ordered:
+            self.add_row(
+                _symbol_label(stock.symbol, self._favorites, self._hot_ticker),
+                "",
+                "",
+                stock.sector,
+                key=stock.symbol,
+            )
+        if prev_symbol is not None:
+            for i, s in enumerate(ordered):
+                if s.symbol == prev_symbol:
+                    self.move_cursor(row=i)
+                    break
 
     def refresh_prices(self, prices: dict[str, float]) -> None:
         for stock in STOCKS:

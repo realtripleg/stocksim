@@ -55,6 +55,22 @@ def init_schema(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_prices_ticker_ts ON prices(ticker, sim_ts DESC);
         CREATE INDEX IF NOT EXISTS idx_trades_ts ON trades(sim_ts DESC);
+        CREATE TABLE IF NOT EXISTS favorites (
+            ticker TEXT PRIMARY KEY
+        );
+        CREATE TABLE IF NOT EXISTS hot_state (
+            id      INTEGER PRIMARY KEY CHECK (id = 1),
+            sim_day INTEGER NOT NULL,
+            ticker  TEXT
+        );
+        CREATE TABLE IF NOT EXISTS scheduled_events (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker           TEXT NOT NULL,
+            headline         TEXT NOT NULL,
+            pct_change       REAL NOT NULL,
+            scheduled_sim_ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_scheduled_ts ON scheduled_events(scheduled_sim_ts);
         """
     )
     cur = conn.execute("SELECT 1 FROM portfolio WHERE id = 1")
@@ -62,6 +78,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "INSERT INTO portfolio (id, cash, sim_minutes) VALUES (1, ?, 0)",
             (STARTING_CASH,),
+        )
+    cur = conn.execute("SELECT 1 FROM hot_state WHERE id = 1")
+    if cur.fetchone() is None:
+        conn.execute(
+            "INSERT INTO hot_state (id, sim_day, ticker) VALUES (1, -1, NULL)"
         )
 
 
@@ -207,3 +228,63 @@ def trim_prices(
             """,
             (t, t, keep_last),
         )
+
+
+def get_favorites(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT ticker FROM favorites").fetchall()
+    return {r["ticker"] for r in rows}
+
+
+def toggle_favorite(conn: sqlite3.Connection, ticker: str) -> bool:
+    row = conn.execute("SELECT 1 FROM favorites WHERE ticker = ?", (ticker,)).fetchone()
+    if row is None:
+        conn.execute("INSERT INTO favorites (ticker) VALUES (?)", (ticker,))
+        return True
+    conn.execute("DELETE FROM favorites WHERE ticker = ?", (ticker,))
+    return False
+
+
+@dataclass(frozen=True)
+class HotState:
+    sim_day: int
+    ticker: str | None
+
+
+def get_hot_state(conn: sqlite3.Connection) -> HotState:
+    row = conn.execute("SELECT sim_day, ticker FROM hot_state WHERE id = 1").fetchone()
+    return HotState(sim_day=row["sim_day"], ticker=row["ticker"])
+
+
+def set_hot_state(conn: sqlite3.Connection, sim_day: int, ticker: str | None) -> None:
+    conn.execute(
+        "UPDATE hot_state SET sim_day = ?, ticker = ? WHERE id = 1",
+        (sim_day, ticker),
+    )
+
+
+def schedule_event(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str,
+    headline: str,
+    pct_change: float,
+    scheduled_sim_ts: int,
+) -> int:
+    cur = conn.execute(
+        "INSERT INTO scheduled_events (ticker, headline, pct_change, scheduled_sim_ts) "
+        "VALUES (?, ?, ?, ?)",
+        (ticker, headline, pct_change, scheduled_sim_ts),
+    )
+    return cur.lastrowid
+
+
+def peek_due_events(conn: sqlite3.Connection, sim_ts: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT id, ticker, headline, pct_change, scheduled_sim_ts FROM scheduled_events "
+        "WHERE scheduled_sim_ts <= ? ORDER BY scheduled_sim_ts",
+        (sim_ts,),
+    ).fetchall()
+
+
+def delete_event(conn: sqlite3.Connection, event_id: int) -> None:
+    conn.execute("DELETE FROM scheduled_events WHERE id = ?", (event_id,))

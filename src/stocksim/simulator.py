@@ -8,6 +8,7 @@ from .stocks import SECTOR_RHO, SECTORS, STOCKS
 
 MINUTES_PER_TRADING_DAY: int = 1440
 PRICE_FLOOR: float = 0.01
+HOT_VOL_MULTIPLIER: float = 3.0
 
 
 def step(
@@ -15,6 +16,7 @@ def step(
     dmin: int,
     *,
     rng: random.Random | None = None,
+    hot_ticker: str | None = None,
 ) -> dict[str, float]:
     if dmin <= 0:
         return dict(prices)
@@ -30,8 +32,9 @@ def step(
         rho = SECTOR_RHO[stock.sector]
         z_idio = r.gauss(0.0, 1.0)
         z = rho * sector_z[stock.sector] + math.sqrt(1.0 - rho * rho) * z_idio
+        sigma = stock.sigma * HOT_VOL_MULTIPLIER if stock.symbol == hot_ticker else stock.sigma
         drift = (stock.mu - 0.5 * stock.sigma * stock.sigma) * dt
-        diffusion = stock.sigma * sqrt_dt * z
+        diffusion = sigma * sqrt_dt * z
         next_price = prices[stock.symbol] * math.exp(drift + diffusion)
         new_prices[stock.symbol] = max(next_price, PRICE_FLOOR)
 

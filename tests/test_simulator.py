@@ -107,3 +107,46 @@ def test_within_sector_correlation_is_positive():
     cross_corr = corr(aapl_rets, xom_rets)
     assert tech_corr > 0.2
     assert tech_corr > cross_corr
+
+
+def test_hot_ticker_has_higher_sample_stdev():
+    rng_a = random.Random(7)
+    rng_b = random.Random(7)
+    start = seed_prices()
+    target = "AAPL"
+    n = 2000
+
+    cold = []
+    for _ in range(n):
+        out = simulator.step(start, dmin=1, rng=rng_a)
+        cold.append(math.log(out[target] / start[target]))
+
+    hot = []
+    for _ in range(n):
+        out = simulator.step(start, dmin=1, rng=rng_b, hot_ticker=target)
+        hot.append(math.log(out[target] / start[target]))
+
+    sd_cold = statistics.pstdev(cold)
+    sd_hot = statistics.pstdev(hot)
+    assert sd_hot > 2.0 * sd_cold
+
+
+def test_hot_ticker_does_not_affect_others():
+    rng_a = random.Random(99)
+    rng_b = random.Random(99)
+    start = seed_prices()
+    n = 1500
+
+    cold = []
+    for _ in range(n):
+        out = simulator.step(start, dmin=1, rng=rng_a)
+        cold.append(math.log(out["MSFT"] / start["MSFT"]))
+
+    hot = []
+    for _ in range(n):
+        out = simulator.step(start, dmin=1, rng=rng_b, hot_ticker="AAPL")
+        hot.append(math.log(out["MSFT"] / start["MSFT"]))
+
+    sd_cold = statistics.pstdev(cold)
+    sd_hot = statistics.pstdev(hot)
+    assert 0.85 * sd_cold < sd_hot < 1.15 * sd_cold

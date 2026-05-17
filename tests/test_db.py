@@ -102,3 +102,60 @@ def test_reset_removes_db(tmp_path):
     assert path.exists()
     db.reset(path)
     assert not path.exists()
+
+
+def test_favorites_empty_by_default(conn):
+    assert db.get_favorites(conn) == set()
+
+
+def test_toggle_favorite_round_trip(conn):
+    assert db.toggle_favorite(conn, "AAPL") is True
+    assert db.get_favorites(conn) == {"AAPL"}
+    assert db.toggle_favorite(conn, "AAPL") is False
+    assert db.get_favorites(conn) == set()
+
+
+def test_multiple_favorites(conn):
+    db.toggle_favorite(conn, "AAPL")
+    db.toggle_favorite(conn, "MSFT")
+    db.toggle_favorite(conn, "TSLA")
+    assert db.get_favorites(conn) == {"AAPL", "MSFT", "TSLA"}
+
+
+def test_hot_state_seeded(conn):
+    h = db.get_hot_state(conn)
+    assert h.sim_day == -1
+    assert h.ticker is None
+
+
+def test_set_hot_state(conn):
+    db.set_hot_state(conn, sim_day=3, ticker="NVDA")
+    h = db.get_hot_state(conn)
+    assert h.sim_day == 3
+    assert h.ticker == "NVDA"
+
+
+def test_set_hot_state_with_none_ticker(conn):
+    db.set_hot_state(conn, sim_day=5, ticker=None)
+    h = db.get_hot_state(conn)
+    assert h.sim_day == 5
+    assert h.ticker is None
+
+
+def test_schedule_event_and_peek_due(conn):
+    db.schedule_event(conn, ticker="AAPL", headline="hint", pct_change=0.05, scheduled_sim_ts=100)
+    db.schedule_event(conn, ticker="MSFT", headline="hint", pct_change=-0.03, scheduled_sim_ts=200)
+    due = db.peek_due_events(conn, sim_ts=99)
+    assert due == []
+    due = db.peek_due_events(conn, sim_ts=150)
+    assert [r["ticker"] for r in due] == ["AAPL"]
+    due = db.peek_due_events(conn, sim_ts=300)
+    assert [r["ticker"] for r in due] == ["AAPL", "MSFT"]
+
+
+def test_delete_event(conn):
+    eid = db.schedule_event(
+        conn, ticker="AAPL", headline="x", pct_change=0.05, scheduled_sim_ts=10
+    )
+    db.delete_event(conn, eid)
+    assert db.peek_due_events(conn, sim_ts=999) == []
