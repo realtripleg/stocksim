@@ -1,0 +1,83 @@
+Screen {
+    background: $background;
+}
+
+Header {
+    background: $primary;
+}
+
+#main {
+    height: 1fr;
+}
+
+#watchlist {
+    width: 1fr;
+    height: 100%;
+    margin: 1 1 0 1;
+}
+
+#portfolio {
+    width: 50;
+    height: 100%;
+    margin: 1 1 0 0;
+    padding: 1 2;
+    border: round $primary;
+}
+
+.panel-title {
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#summary {
+    margin-bottom: 1;
+    height: auto;
+}
+
+#positions {
+    height: 1fr;
+}
+
+#news-log {
+    height: 8;
+    margin: 0 1 0 1;
+    padding: 0 1;
+    border: round $accent;
+    background: $boost;
+}
+
+TradeModal {
+    align: center middle;
+}
+
+#trade-modal {
+    background: $panel;
+    border: thick $accent;
+    padding: 2 4;
+    width: 60;
+    height: auto;
+}
+
+#trade-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#shares-input {
+    margin: 1 0;
+}
+
+#estimate {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#trade-buttons {
+    align-horizontal: center;
+    height: auto;
+}
+
+#trade-buttons Button {
+    margin: 0 1;
+}
