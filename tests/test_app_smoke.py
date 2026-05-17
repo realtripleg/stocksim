@@ -131,6 +131,7 @@ async def test_tab_switch(tmp_path):
         tabs = app.query_one(TabbedContent)
         assert tabs.active == "tab-stocks"
         assert app._active_watchlist().selected_symbol == "AAPL"
+        assert app.focused is app._active_watchlist()
 
         app.action_switch_tab()
         await pilot.pause()
@@ -138,10 +139,18 @@ async def test_tab_switch(tmp_path):
         assert tabs.active == "tab-crypto"
         crypto_symbols = {c.symbol for c in CRYPTOS}
         assert app._active_watchlist().selected_symbol in crypto_symbols
+        assert app.focused is app._active_watchlist()
+
+        wl = app._active_watchlist()
+        before = wl.cursor_coordinate.row
+        await pilot.press("down")
+        await pilot.pause()
+        assert wl.cursor_coordinate.row == before + 1
 
         app.action_switch_tab()
         await pilot.pause()
         assert tabs.active == "tab-stocks"
+        assert app.focused is app._active_watchlist()
 
 
 @pytest.mark.asyncio
@@ -162,3 +171,18 @@ async def test_pause_does_not_spam_log(tmp_path):
 
         after = len(log.lines)
         assert after == before
+
+
+@pytest.mark.asyncio
+async def test_active_watchlist_has_visible_height(tmp_path):
+    pytest.importorskip("textual.pilot")
+    app = StockSimApp(db_path=tmp_path / "h.db")
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        wl = app._active_watchlist()
+        assert wl.region.height > 5, f"watchlist collapsed to height {wl.region.height}"
+        assert wl.region.width > 20, f"watchlist collapsed to width {wl.region.width}"
+        app.action_switch_tab()
+        await pilot.pause()
+        wl2 = app._active_watchlist()
+        assert wl2.region.height > 5, f"crypto watchlist collapsed to height {wl2.region.height}"

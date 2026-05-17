@@ -98,6 +98,18 @@ class StockSimApp(App):
             )
         self._refresh_subtitle()
         self.set_interval(TICK_REAL_SECONDS, self._tick)
+        self.call_after_refresh(self._focus_active_watchlist)
+
+    def _focus_active_watchlist(self) -> None:
+        try:
+            self._active_watchlist().focus()
+        except Exception:
+            pass
+
+    def on_tabbed_content_tab_activated(
+        self, event: TabbedContent.TabActivated
+    ) -> None:
+        self.call_after_refresh(self._focus_active_watchlist)
 
     def _tick(self) -> None:
         dmin = self.clock.advance(TICK_REAL_SECONDS)
