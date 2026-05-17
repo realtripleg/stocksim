@@ -1,9 +1,9 @@
-
 from __future__ import annotations
 
 import pytest
 
 from stocksim.app import StockSimApp
+from stocksim.stocks import ALL_ASSETS, CRYPTOS
 
 
 @pytest.mark.asyncio
@@ -13,7 +13,7 @@ async def test_app_mounts_and_ticks(tmp_path):
     async with app.run_test() as pilot:
         await pilot.pause()
         assert not app.clock.paused
-        assert len(app.prices) == 30
+        assert len(app.prices) == len(ALL_ASSETS)
         await pilot.pause(1.2)
         await pilot.press("space")
         await pilot.pause()
@@ -73,13 +73,11 @@ async def test_state_persists_across_relaunch(tmp_path):
 @pytest.mark.asyncio
 async def test_toggle_favorite_pins_to_top(tmp_path):
     pytest.importorskip("textual.pilot")
-    from stocksim import db
-    from stocksim.widgets.watchlist import WatchlistTable
 
     app = StockSimApp(db_path=tmp_path / "fav.db")
     async with app.run_test() as pilot:
         await pilot.pause()
-        watchlist = app.query_one(WatchlistTable)
+        watchlist = app._active_watchlist()
         target = "NVDA"
         watchlist.move_cursor(row=5)
         await pilot.pause()
@@ -120,3 +118,47 @@ async def test_scheduled_event_fires_after_sim_ts(tmp_path):
         remaining = db.peek_due_events(app.conn, app.clock.sim_minutes + 10000)
         assert all(r["ticker"] != target or r["headline"] != "scheduled boom" for r in remaining)
         assert app.prices[target] > initial_price * 1.2
+
+
+@pytest.mark.asyncio
+async def test_tab_switch(tmp_path):
+    pytest.importorskip("textual.pilot")
+    from textual.widgets import TabbedContent
+
+    app = StockSimApp(db_path=tmp_path / "tabs.db")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tabs = app.query_one(TabbedContent)
+        assert tabs.active == "tab-stocks"
+        assert app._active_watchlist().selected_symbol == "AAPL"
+
+        app.action_switch_tab()
+        await pilot.pause()
+
+        assert tabs.active == "tab-crypto"
+        crypto_symbols = {c.symbol for c in CRYPTOS}
+        assert app._active_watchlist().selected_symbol in crypto_symbols
+
+        app.action_switch_tab()
+        await pilot.pause()
+        assert tabs.active == "tab-stocks"
+
+
+@pytest.mark.asyncio
+async def test_pause_does_not_spam_log(tmp_path):
+    pytest.importorskip("textual.pilot")
+    from textual.widgets import RichLog
+
+    app = StockSimApp(db_path=tmp_path / "pause.db")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log = app.query_one("#news-log", RichLog)
+        before = len(log.lines)
+
+        await pilot.press("space")
+        await pilot.pause()
+        await pilot.press("space")
+        await pilot.pause()
+
+        after = len(log.lines)
+        assert after == before

@@ -5,7 +5,7 @@ import random
 import statistics
 
 from stocksim import simulator
-from stocksim.stocks import STOCKS, seed_prices
+from stocksim.stocks import ALL_ASSETS, CRYPTOS, STOCKS, seed_prices
 
 
 def test_step_returns_new_dict():
@@ -38,7 +38,7 @@ def test_prices_never_negative_over_long_run():
 
 def test_price_floor_protects_extreme_shocks():
     rng = random.Random(0)
-    prices = {s.symbol: 0.02 for s in STOCKS}
+    prices = {s.symbol: 0.02 for s in ALL_ASSETS}
     for _ in range(1000):
         prices = simulator.step(prices, dmin=1, rng=rng)
         assert all(p >= simulator.PRICE_FLOOR for p in prices.values())
@@ -150,3 +150,33 @@ def test_hot_ticker_does_not_affect_others():
     sd_cold = statistics.pstdev(cold)
     sd_hot = statistics.pstdev(hot)
     assert 0.85 * sd_cold < sd_hot < 1.15 * sd_cold
+
+
+def test_step_includes_crypto():
+    prices = seed_prices()
+    out = simulator.step(prices, dmin=1, rng=random.Random(0))
+    for c in CRYPTOS:
+        assert c.symbol in out
+    assert "BTC" in out and "DOGE" in out
+
+
+def test_crypto_more_volatile_than_stocks():
+    rng_a = random.Random(11)
+    rng_b = random.Random(11)
+    start = seed_prices()
+    n = 1500
+
+    stock_rets = []
+    crypto_rets = []
+    for _ in range(n):
+        out = simulator.step(start, dmin=1, rng=rng_a)
+        stock_rets.append(math.log(out["AAPL"] / start["AAPL"]))
+
+    rng_a = random.Random(11)
+    for _ in range(n):
+        out = simulator.step(start, dmin=1, rng=rng_b)
+        crypto_rets.append(math.log(out["BTC"] / start["BTC"]))
+
+    sd_stock = statistics.pstdev(stock_rets)
+    sd_crypto = statistics.pstdev(crypto_rets)
+    assert sd_crypto > 1.5 * sd_stock

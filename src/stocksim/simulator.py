@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import random
 
-from .stocks import SECTOR_RHO, SECTORS, STOCKS
+from .stocks import ALL_ASSETS, SECTOR_RHO, SECTORS
 
 MINUTES_PER_TRADING_DAY: int = 1440
 PRICE_FLOOR: float = 0.01
@@ -28,7 +28,7 @@ def step(
     sector_z = {sec: r.gauss(0.0, 1.0) for sec in SECTORS}
 
     new_prices: dict[str, float] = {}
-    for stock in STOCKS:
+    for stock in ALL_ASSETS:
         rho = SECTOR_RHO[stock.sector]
         z_idio = r.gauss(0.0, 1.0)
         z = rho * sector_z[stock.sector] + math.sqrt(1.0 - rho * rho) * z_idio

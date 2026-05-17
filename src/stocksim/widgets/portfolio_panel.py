@@ -9,6 +9,7 @@ from textual.widgets import Static
 
 from ..db import STARTING_CASH
 from ..portfolio import Portfolio
+from ..stocks import format_price
 
 
 class PortfolioPanel(Vertical):
@@ -62,8 +63,8 @@ class PortfolioPanel(Vertical):
             tbl.add_row(
                 pos.ticker,
                 str(pos.shares),
-                f"${pos.avg_cost:,.2f}",
-                f"${now:,.2f}",
+                format_price(pos.avg_cost),
+                format_price(now),
                 f"[{color}]{sign}${pos_pnl:,.2f}[/]",
             )
         self._positions.update(tbl)

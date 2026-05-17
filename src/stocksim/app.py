@@ -7,18 +7,21 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, RichLog
+from textual.widgets import Footer, Header, RichLog, TabbedContent, TabPane
 
 from . import db, news, simulator
 from .clock import SimClock
 from .portfolio import Portfolio, TradeError
-from .stocks import STOCKS, seed_prices
+from .stocks import ALL_ASSETS, CRYPTOS, STOCKS, format_price, seed_prices
 from .widgets import PortfolioPanel, TradeModal, WatchlistTable
 
 TICK_REAL_SECONDS: float = 1.0
 TRIM_EVERY_N_TICKS: int = 200
 PRICE_HISTORY_KEEP: int = 1440
 STOCK_OF_DAY_PROBABILITY: float = 0.4
+
+TAB_STOCKS = "tab-stocks"
+TAB_CRYPTO = "tab-crypto"
 
 
 class StockSimApp(App):
@@ -30,6 +33,7 @@ class StockSimApp(App):
         Binding("b", "buy", "Buy"),
         Binding("s", "sell", "Sell"),
         Binding("f", "toggle_favorite", "Favorite"),
+        Binding("t", "switch_tab", "Switch tab"),
         Binding("space", "toggle_pause", "Pause"),
         Binding("plus,equals_sign,equal", "speed_up", "Faster"),
         Binding("minus,underscore", "slow_down", "Slower"),
@@ -61,16 +65,27 @@ class StockSimApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="main"):
-            yield WatchlistTable()
+            with TabbedContent(initial=TAB_STOCKS, id="watchlists"):
+                with TabPane("Stocks", id=TAB_STOCKS):
+                    yield WatchlistTable(STOCKS, widget_id="watchlist-stocks")
+                with TabPane("Crypto", id=TAB_CRYPTO):
+                    yield WatchlistTable(CRYPTOS, widget_id="watchlist-crypto")
             yield PortfolioPanel()
         yield RichLog(id="news-log", max_lines=50, highlight=True, markup=True, wrap=True)
         yield Footer()
 
+    def _active_watchlist(self) -> WatchlistTable:
+        tabs = self.query_one(TabbedContent)
+        return tabs.active_pane.query_one(WatchlistTable)
+
+    def _all_watchlists(self) -> list[WatchlistTable]:
+        return list(self.query(WatchlistTable))
+
     def on_mount(self) -> None:
-        watchlist = self.query_one(WatchlistTable)
+        for wl in self._all_watchlists():
+            wl.rebuild(self.favorites, self.hot_ticker)
+            wl.refresh_prices(self.prices)
         panel = self.query_one(PortfolioPanel)
-        watchlist.rebuild(self.favorites, self.hot_ticker)
-        watchlist.refresh_prices(self.prices)
         panel.refresh_view(self.portfolio, self.prices)
         self._log = self.query_one("#news-log", RichLog)
         self._log.write(
@@ -79,7 +94,7 @@ class StockSimApp(App):
         )
         if self.hot_ticker:
             self._log.write(
-                f"[bold yellow]🔥 Today's hot stock: {self.hot_ticker}[/]"
+                f"[bold yellow]🔥 Today's hot ticker: {self.hot_ticker}[/]"
             )
         self._refresh_subtitle()
         self.set_interval(TICK_REAL_SECONDS, self._tick)
@@ -149,13 +164,13 @@ class StockSimApp(App):
         if self._tick_count % TRIM_EVERY_N_TICKS == 0:
             db.trim_prices(
                 self.conn,
-                [s.symbol for s in STOCKS],
+                [s.symbol for s in ALL_ASSETS],
                 keep_last=PRICE_HISTORY_KEEP,
             )
 
     def _roll_hot_ticker(self, sim_day: int) -> None:
         if self._rng.random() < STOCK_OF_DAY_PROBABILITY:
-            new_hot: str | None = self._rng.choice(STOCKS).symbol
+            new_hot: str | None = self._rng.choice(ALL_ASSETS).symbol
         else:
             new_hot = None
         with db.transaction(self.conn):
@@ -163,11 +178,12 @@ class StockSimApp(App):
         self.hot_ticker = new_hot
         if self.is_mounted:
             if new_hot is not None:
-                self._log.write(f"[bold yellow]🔥 Today's hot stock: {new_hot}[/]")
+                self._log.write(f"[bold yellow]🔥 Today's hot ticker: {new_hot}[/]")
             else:
-                self._log.write("[dim]Quiet day — no hot stock today.[/]")
+                self._log.write("[dim]Quiet day — no hot ticker today.[/]")
             try:
-                self.query_one(WatchlistTable).rebuild(self.favorites, self.hot_ticker)
+                for wl in self._all_watchlists():
+                    wl.rebuild(self.favorites, self.hot_ticker)
             except Exception:
                 pass
 
@@ -175,7 +191,8 @@ class StockSimApp(App):
         if not new or not self.is_mounted:
             return
         try:
-            self.query_one(WatchlistTable).refresh_prices(new)
+            for wl in self._all_watchlists():
+                wl.refresh_prices(new)
             self.query_one(PortfolioPanel).refresh_view(self.portfolio, new)
         except Exception:
             pass
@@ -202,14 +219,17 @@ class StockSimApp(App):
         self._log.write(
             f"[{color}]💥 {event.headline} ({sign}{event.pct_change * 100:.1f}%)[/]"
         )
-        self.notify(event.headline, severity="error" if event.kind == "crash" else "information", timeout=5)
+        self.notify(
+            event.headline,
+            severity="error" if event.kind == "crash" else "information",
+            timeout=5,
+        )
 
     def _log_tip(self, event: news.NewsEvent) -> None:
         self._log.write(f"[yellow italic]🤫 {news.tip_for(event, rng=self._rng)}[/]")
 
     def action_toggle_pause(self) -> None:
-        paused = self.clock.toggle_pause()
-        self._log.write("[yellow]⏸ Paused[/]" if paused else "[yellow]▶ Resumed[/]")
+        self.clock.toggle_pause()
         self._refresh_subtitle()
 
     def action_speed_up(self) -> None:
@@ -220,8 +240,12 @@ class StockSimApp(App):
         self.clock.slow_down()
         self._refresh_subtitle()
 
+    def action_switch_tab(self) -> None:
+        tabs = self.query_one(TabbedContent)
+        tabs.active = TAB_CRYPTO if tabs.active == TAB_STOCKS else TAB_STOCKS
+
     def action_toggle_favorite(self) -> None:
-        watchlist = self.query_one(WatchlistTable)
+        watchlist = self._active_watchlist()
         sym = watchlist.selected_symbol
         if sym is None:
             self.bell()
@@ -229,8 +253,9 @@ class StockSimApp(App):
         with db.transaction(self.conn):
             added = db.toggle_favorite(self.conn, sym)
         self.favorites = db.get_favorites(self.conn)
-        watchlist.rebuild(self.favorites, self.hot_ticker)
-        watchlist.refresh_prices(self.prices)
+        for wl in self._all_watchlists():
+            wl.rebuild(self.favorites, self.hot_ticker)
+            wl.refresh_prices(self.prices)
         if added:
             self._log.write(f"[yellow]★ Pinned {sym}[/]")
         else:
@@ -243,7 +268,7 @@ class StockSimApp(App):
         self._open_trade("sell")
 
     def _open_trade(self, side: str) -> None:
-        watchlist = self.query_one(WatchlistTable)
+        watchlist = self._active_watchlist()
         symbol = watchlist.selected_symbol
         if symbol is None:
             self.bell()
@@ -272,7 +297,7 @@ class StockSimApp(App):
                         sim_ts=self.clock.sim_minutes,
                     )
                     self._log.write(
-                        f"[cyan]✓ Bought {r.shares} {r.ticker} @ ${r.price:,.2f} "
+                        f"[cyan]✓ Bought {r.shares} {r.ticker} @ {format_price(r.price)} "
                         f"(${r.total:,.2f})[/]"
                     )
                 else:
@@ -283,7 +308,7 @@ class StockSimApp(App):
                         sim_ts=self.clock.sim_minutes,
                     )
                     self._log.write(
-                        f"[magenta]✓ Sold {r.shares} {r.ticker} @ ${r.price:,.2f} "
+                        f"[magenta]✓ Sold {r.shares} {r.ticker} @ {format_price(r.price)} "
                         f"(${r.total:,.2f})[/]"
                     )
             except TradeError as exc:

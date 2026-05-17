@@ -1,7 +1,7 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -12,6 +12,7 @@ class Stock:
     seed_price: float
     mu: float
     sigma: float
+    kind: Literal["stock", "crypto"] = "stock"
 
 
 STOCKS: tuple[Stock, ...] = (
@@ -53,7 +54,26 @@ STOCKS: tuple[Stock, ...] = (
 )
 
 
-SECTORS: tuple[str, ...] = ("tech", "finance", "consumer", "healthcare", "energy", "industrial")
+CRYPTOS: tuple[Stock, ...] = (
+    Stock("BTC",   "Bitcoin",     "crypto", 65_000.00, 0.30, 0.65, kind="crypto"),
+    Stock("ETH",   "Ethereum",    "crypto",  3_200.00, 0.30, 0.70, kind="crypto"),
+    Stock("SOL",   "Solana",      "crypto",    140.00, 0.25, 0.85, kind="crypto"),
+    Stock("DOGE",  "Dogecoin",    "crypto",      0.12, 0.10, 1.00, kind="crypto"),
+    Stock("ADA",   "Cardano",     "crypto",      0.45, 0.05, 0.80, kind="crypto"),
+    Stock("XRP",   "Ripple",      "crypto",      0.55, 0.05, 0.75, kind="crypto"),
+    Stock("AVAX",  "Avalanche",   "crypto",     35.00, 0.15, 0.85, kind="crypto"),
+    Stock("MATIC", "Polygon",     "crypto",      0.70, 0.05, 0.85, kind="crypto"),
+    Stock("LINK",  "Chainlink",   "crypto",     15.00, 0.15, 0.80, kind="crypto"),
+    Stock("LTC",   "Litecoin",    "crypto",     75.00, 0.05, 0.65, kind="crypto"),
+)
+
+
+ALL_ASSETS: tuple[Stock, ...] = STOCKS + CRYPTOS
+
+
+SECTORS: tuple[str, ...] = (
+    "tech", "finance", "consumer", "healthcare", "energy", "industrial", "crypto",
+)
 
 
 SECTOR_RHO: dict[str, float] = {
@@ -63,10 +83,11 @@ SECTOR_RHO: dict[str, float] = {
     "healthcare": 0.35,
     "energy":     0.65,
     "industrial": 0.45,
+    "crypto":     0.75,
 }
 
 
-BY_SYMBOL: dict[str, Stock] = {s.symbol: s for s in STOCKS}
+BY_SYMBOL: dict[str, Stock] = {s.symbol: s for s in ALL_ASSETS}
 
 
 def get(symbol: str) -> Stock:
@@ -74,4 +95,10 @@ def get(symbol: str) -> Stock:
 
 
 def seed_prices() -> dict[str, float]:
-    return {s.symbol: s.seed_price for s in STOCKS}
+    return {s.symbol: s.seed_price for s in ALL_ASSETS}
+
+
+def format_price(price: float) -> str:
+    if price < 1.0:
+        return f"${price:.4f}"
+    return f"${price:,.2f}"

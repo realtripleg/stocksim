@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .simulator import PRICE_FLOOR
-from .stocks import STOCKS, Stock
+from .stocks import ALL_ASSETS, STOCKS, Stock
 
 MINUTES_PER_SIM_DAY: int = 1440
 DEFAULT_LAMBDA_PER_SIM_DAY: float = 0.5
@@ -42,6 +42,24 @@ NEGATIVE_TEMPLATES: tuple[str, ...] = (
     "Key executive departs {ticker}",
     "{ticker} hit with class-action lawsuit",
     "Downgrade weighs on {ticker}",
+)
+
+CRYPTO_POSITIVE_TEMPLATES: tuple[str, ...] = (
+    "{ticker} breaks key resistance",
+    "Whale accumulation drives {ticker} bid",
+    "{ticker} sees record on-chain volume",
+    "Major exchange adds new {ticker} pair",
+    "{ticker} network upgrade lands cleanly",
+    "Institutional inflows lift {ticker}",
+)
+
+CRYPTO_NEGATIVE_TEMPLATES: tuple[str, ...] = (
+    "{ticker} loses key support",
+    "Large {ticker} liquidations cascade across exchanges",
+    "Smart-contract exploit shakes {ticker}",
+    "Regulatory headwinds hit {ticker}",
+    "{ticker} whales move funds to exchanges",
+    "Outflows from {ticker} ETF products accelerate",
 )
 
 CRASH_TEMPLATES: tuple[str, ...] = (
@@ -85,16 +103,20 @@ def pick_ticker_weighted(
     hot_ticker: str | None = None,
 ) -> Stock:
     if hot_ticker is None:
-        return rng.choice(STOCKS)
-    weights = [HOT_WEIGHT if s.symbol == hot_ticker else 1.0 for s in STOCKS]
-    return rng.choices(STOCKS, weights=weights, k=1)[0]
+        return rng.choice(ALL_ASSETS)
+    weights = [HOT_WEIGHT if s.symbol == hot_ticker else 1.0 for s in ALL_ASSETS]
+    return rng.choices(ALL_ASSETS, weights=weights, k=1)[0]
 
 
 def _build_news_event(rng: random.Random, stock: Stock) -> NewsEvent:
     magnitude = rng.uniform(MIN_SHOCK, MAX_SHOCK)
     positive = rng.random() < 0.5
     pct = magnitude if positive else -magnitude
-    template = rng.choice(POSITIVE_TEMPLATES if positive else NEGATIVE_TEMPLATES)
+    if stock.kind == "crypto":
+        pool = CRYPTO_POSITIVE_TEMPLATES if positive else CRYPTO_NEGATIVE_TEMPLATES
+    else:
+        pool = POSITIVE_TEMPLATES if positive else NEGATIVE_TEMPLATES
+    template = rng.choice(pool)
     return NewsEvent(
         ticker=stock.symbol,
         headline=template.format(ticker=stock.symbol),

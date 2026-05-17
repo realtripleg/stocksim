@@ -10,10 +10,19 @@ Header {
     height: 1fr;
 }
 
-#watchlist {
+#watchlists {
     width: 1fr;
     height: 100%;
     margin: 1 1 0 1;
+}
+
+TabPane {
+    padding: 0 1;
+}
+
+WatchlistTable {
+    width: 1fr;
+    height: 100%;
 }
 
 #portfolio {

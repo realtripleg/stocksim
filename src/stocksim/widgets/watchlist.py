@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from textual.widgets import DataTable
 
-from ..stocks import STOCKS, Stock
-
-_STOCK_INDEX: dict[str, int] = {s.symbol: i for i, s in enumerate(STOCKS)}
+from ..stocks import STOCKS, Stock, format_price
 
 
 def _symbol_label(symbol: str, favorites: set[str], hot_ticker: str | None) -> str:
@@ -15,28 +13,34 @@ def _symbol_label(symbol: str, favorites: set[str], hot_ticker: str | None) -> s
     return symbol
 
 
-def _sorted_stocks(favorites: set[str]) -> list[Stock]:
-    return sorted(
-        STOCKS,
-        key=lambda s: (0 if s.symbol in favorites else 1, _STOCK_INDEX[s.symbol]),
-    )
-
-
 class WatchlistTable(DataTable):
-    def __init__(self) -> None:
-        super().__init__(zebra_stripes=True, cursor_type="row", id="watchlist")
+    def __init__(
+        self,
+        assets: tuple[Stock, ...] = STOCKS,
+        *,
+        widget_id: str | None = None,
+    ) -> None:
+        super().__init__(zebra_stripes=True, cursor_type="row", id=widget_id)
+        self._assets: tuple[Stock, ...] = assets
+        self._index: dict[str, int] = {s.symbol: i for i, s in enumerate(self._assets)}
         self._favorites: set[str] = set()
         self._hot_ticker: str | None = None
 
+    def _sorted_assets(self) -> list[Stock]:
+        return sorted(
+            self._assets,
+            key=lambda s: (0 if s.symbol in self._favorites else 1, self._index[s.symbol]),
+        )
+
     def on_mount(self) -> None:
         self.add_column("Symbol", width=10, key="symbol")
-        self.add_column("Price", width=11, key="price")
+        self.add_column("Price", width=12, key="price")
         self.add_column("Δ%", width=8, key="delta")
         self.add_column("Sector", width=12, key="sector")
-        for stock in _sorted_stocks(self._favorites):
+        for stock in self._sorted_assets():
             self.add_row(
                 _symbol_label(stock.symbol, self._favorites, self._hot_ticker),
-                f"${stock.seed_price:,.2f}",
+                format_price(stock.seed_price),
                 "+0.00%",
                 stock.sector,
                 key=stock.symbol,
@@ -49,7 +53,7 @@ class WatchlistTable(DataTable):
         self._favorites = set(favorites)
         self._hot_ticker = hot_ticker
         self.clear()
-        ordered = _sorted_stocks(self._favorites)
+        ordered = self._sorted_assets()
         for stock in ordered:
             self.add_row(
                 _symbol_label(stock.symbol, self._favorites, self._hot_ticker),
@@ -65,12 +69,12 @@ class WatchlistTable(DataTable):
                     break
 
     def refresh_prices(self, prices: dict[str, float]) -> None:
-        for stock in STOCKS:
+        for stock in self._assets:
             price = prices.get(stock.symbol, stock.seed_price)
             delta_pct = (price / stock.seed_price - 1.0) * 100.0
             color = "green" if delta_pct >= 0 else "red"
             sign = "+" if delta_pct >= 0 else ""
-            self.update_cell(stock.symbol, "price", f"${price:,.2f}")
+            self.update_cell(stock.symbol, "price", format_price(price))
             self.update_cell(
                 stock.symbol,
                 "delta",

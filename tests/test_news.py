@@ -132,12 +132,14 @@ def test_apply_market_event_floors():
 def test_pick_ticker_weighted_uniform():
     rng = random.Random(123)
     counts: dict[str, int] = {}
-    for _ in range(30_000):
+    n_total = len(news.ALL_ASSETS)
+    n_iter = 60_000
+    for _ in range(n_iter):
         s = news.pick_ticker_weighted(rng)
         counts[s.symbol] = counts.get(s.symbol, 0) + 1
-    avg = 30_000 / 30
+    avg = n_iter / n_total
     for sym, n in counts.items():
-        assert 0.7 * avg < n < 1.3 * avg, (sym, n)
+        assert 0.65 * avg < n < 1.35 * avg, (sym, n)
 
 
 def test_pick_ticker_weighted_favors_hot():
@@ -147,7 +149,8 @@ def test_pick_ticker_weighted_favors_hot():
     for _ in range(n):
         s = news.pick_ticker_weighted(rng, hot_ticker="AAPL")
         counts[s.symbol] = counts.get(s.symbol, 0) + 1
-    expected_p_hot = news.HOT_WEIGHT / (news.HOT_WEIGHT + 29)
+    others = len(news.ALL_ASSETS) - 1
+    expected_p_hot = news.HOT_WEIGHT / (news.HOT_WEIGHT + others)
     sample_p_hot = counts["AAPL"] / n
     se = (expected_p_hot * (1 - expected_p_hot) / n) ** 0.5
     assert abs(sample_p_hot - expected_p_hot) < 6 * se
@@ -182,3 +185,25 @@ def test_zero_dmin_no_market_or_tip():
     prices = seed_prices()
     assert news.maybe_market_event(dmin=0, rng=random.Random(0)) is None
     assert news.maybe_schedule_tip(prices, current_sim_ts=0, dmin=0, rng=random.Random(0)) is None
+
+
+def test_crypto_uses_crypto_templates():
+    from stocksim.stocks import BY_SYMBOL
+    btc = BY_SYMBOL["BTC"]
+    rng = random.Random(1)
+    forbidden = ("earnings", "buyback", "executive", "lawsuit", "Analyst", "guidance")
+    for _ in range(500):
+        event = news._build_news_event(rng, btc)
+        for word in forbidden:
+            assert word not in event.headline, event.headline
+
+
+def test_stock_uses_stock_templates():
+    from stocksim.stocks import BY_SYMBOL
+    aapl = BY_SYMBOL["AAPL"]
+    rng = random.Random(2)
+    forbidden = ("Whale", "on-chain", "Smart-contract", "ETF", "exchange")
+    for _ in range(500):
+        event = news._build_news_event(rng, aapl)
+        for word in forbidden:
+            assert word not in event.headline, event.headline
