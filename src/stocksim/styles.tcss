@@ -95,3 +95,134 @@ TradeModal {
 #trade-buttons Button {
     margin: 0 1;
 }
+
+#casino-tab {
+    height: 1fr;
+    padding: 1 2;
+}
+
+#casino-header {
+    text-style: bold;
+    color: $warning;
+    margin-bottom: 0;
+}
+
+#casino-subheader {
+    margin-bottom: 1;
+}
+
+#casino-list {
+    height: 1fr;
+    border: round $accent;
+    background: $boost;
+    padding: 1;
+}
+
+#casino-list > ListItem {
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#casino-list > ListItem.--highlight {
+    background: $accent 30%;
+}
+
+SlotsModal, CoinFlipModal, DiceModal, RouletteModal, CrashModal {
+    align: center middle;
+}
+
+#casino-modal {
+    background: $panel;
+    border: thick $warning;
+    padding: 1 3;
+    width: 72;
+    height: auto;
+}
+
+#casino-title {
+    text-style: bold;
+    color: $warning;
+    content-align: center middle;
+    width: 100%;
+}
+
+#casino-subtitle {
+    content-align: center middle;
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#casino-cash {
+    content-align: center middle;
+    width: 100%;
+    margin-bottom: 1;
+}
+
+.big-display {
+    content-align: center middle;
+    width: 100%;
+    height: 3;
+    text-style: bold;
+    color: $accent;
+    margin: 1 0;
+}
+
+.dice-display {
+    content-align: center middle;
+    width: 100%;
+    height: 5;
+    text-style: bold;
+    color: $accent;
+    margin: 1 0;
+}
+
+.roulette-board {
+    content-align: center middle;
+    width: 100%;
+    height: 4;
+    margin: 1 0;
+}
+
+#dice-sum {
+    content-align: center middle;
+    width: 100%;
+    height: 1;
+    margin-bottom: 1;
+}
+
+#latest {
+    content-align: center middle;
+    width: 100%;
+    height: 1;
+    margin-bottom: 1;
+}
+
+#result {
+    content-align: center middle;
+    width: 100%;
+    height: 1;
+    margin-bottom: 1;
+}
+
+.casino-controls {
+    align-horizontal: center;
+    height: auto;
+    margin-top: 1;
+}
+
+.casino-controls Input {
+    width: 14;
+    margin: 0 1;
+}
+
+.casino-controls Button {
+    margin: 0 1;
+}
+
+.hidden {
+    display: none;
+}
+
+#casino-modal.roulette {
+    width: 86;
+}

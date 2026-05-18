@@ -123,7 +123,7 @@ async def test_scheduled_event_fires_after_sim_ts(tmp_path):
 @pytest.mark.asyncio
 async def test_tab_switch(tmp_path):
     pytest.importorskip("textual.pilot")
-    from textual.widgets import TabbedContent
+    from textual.widgets import ListView, TabbedContent
 
     app = StockSimApp(db_path=tmp_path / "tabs.db")
     async with app.run_test() as pilot:
@@ -146,6 +146,11 @@ async def test_tab_switch(tmp_path):
         await pilot.press("down")
         await pilot.pause()
         assert wl.cursor_coordinate.row == before + 1
+
+        app.action_switch_tab()
+        await pilot.pause()
+        assert tabs.active == "tab-casino"
+        assert isinstance(app.focused, ListView)
 
         app.action_switch_tab()
         await pilot.pause()
@@ -186,3 +191,49 @@ async def test_active_watchlist_has_visible_height(tmp_path):
         await pilot.pause()
         wl2 = app._active_watchlist()
         assert wl2.region.height > 5, f"crypto watchlist collapsed to height {wl2.region.height}"
+
+
+@pytest.mark.asyncio
+async def test_casino_coin_flip_returns_correct_delta(tmp_path):
+    pytest.importorskip("textual.pilot")
+    from stocksim.widgets.casino_modals import CoinFlipModal
+
+    app = StockSimApp(db_path=tmp_path / "casino.db")
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        result = {"delta": None}
+
+        def cb(delta: float | None) -> None:
+            result["delta"] = delta
+
+        modal = CoinFlipModal(app._rng, 10_000.0)
+        app.push_screen(modal, cb)
+        await pilot.pause()
+        modal.query_one("#bet-input").value = "100"
+        await pilot.pause()
+        modal.guess = "heads"
+        modal._start_flip()
+        for _ in range(modal.FLIP_DURATION_TICKS + 2):
+            modal._tick_flip()
+        modal.action_close()
+        await pilot.pause()
+        assert result["delta"] in (-100.0, 90.0)
+
+
+@pytest.mark.asyncio
+async def test_casino_tab_focuses_listview_on_open(tmp_path):
+    pytest.importorskip("textual.pilot")
+    from textual.widgets import ListView, TabbedContent
+
+    app = StockSimApp(db_path=tmp_path / "casino_focus.db")
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.action_switch_tab()
+        await pilot.pause()
+        app.action_switch_tab()
+        await pilot.pause()
+        tabs = app.query_one(TabbedContent)
+        assert tabs.active == "tab-casino"
+        assert isinstance(app.focused, ListView)
+        tab = app.query_one("#casino-tab")
+        assert tab.region.height > 5

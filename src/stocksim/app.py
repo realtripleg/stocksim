@@ -7,13 +7,13 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, RichLog, TabbedContent, TabPane
+from textual.widgets import Footer, Header, ListView, RichLog, TabbedContent, TabPane
 
 from . import db, news, simulator
 from .clock import SimClock
 from .portfolio import Portfolio, TradeError
 from .stocks import ALL_ASSETS, CRYPTOS, STOCKS, format_price, seed_prices
-from .widgets import PortfolioPanel, TradeModal, WatchlistTable
+from .widgets import CasinoTab, PortfolioPanel, TradeModal, WatchlistTable
 
 TICK_REAL_SECONDS: float = 1.0
 TRIM_EVERY_N_TICKS: int = 200
@@ -22,6 +22,8 @@ STOCK_OF_DAY_PROBABILITY: float = 0.4
 
 TAB_STOCKS = "tab-stocks"
 TAB_CRYPTO = "tab-crypto"
+TAB_CASINO = "tab-casino"
+TAB_ORDER = (TAB_STOCKS, TAB_CRYPTO, TAB_CASINO)
 
 
 class StockSimApp(App):
@@ -70,6 +72,8 @@ class StockSimApp(App):
                     yield WatchlistTable(STOCKS, widget_id="watchlist-stocks")
                 with TabPane("Crypto", id=TAB_CRYPTO):
                     yield WatchlistTable(CRYPTOS, widget_id="watchlist-crypto")
+                with TabPane("Casino", id=TAB_CASINO):
+                    yield CasinoTab(widget_id="casino-tab")
             yield PortfolioPanel()
         yield RichLog(id="news-log", max_lines=50, highlight=True, markup=True, wrap=True)
         yield Footer()
@@ -102,7 +106,11 @@ class StockSimApp(App):
 
     def _focus_active_watchlist(self) -> None:
         try:
-            self._active_watchlist().focus()
+            tabs = self.query_one(TabbedContent)
+            if tabs.active == TAB_CASINO:
+                self.query_one(CasinoTab).query_one(ListView).focus()
+            else:
+                self._active_watchlist().focus()
         except Exception:
             pass
 
@@ -254,9 +262,19 @@ class StockSimApp(App):
 
     def action_switch_tab(self) -> None:
         tabs = self.query_one(TabbedContent)
-        tabs.active = TAB_CRYPTO if tabs.active == TAB_STOCKS else TAB_STOCKS
+        idx = TAB_ORDER.index(tabs.active) if tabs.active in TAB_ORDER else 0
+        tabs.active = TAB_ORDER[(idx + 1) % len(TAB_ORDER)]
+
+    def _on_casino_tab(self) -> bool:
+        try:
+            return self.query_one(TabbedContent).active == TAB_CASINO
+        except Exception:
+            return False
 
     def action_toggle_favorite(self) -> None:
+        if self._on_casino_tab():
+            self.notify("Favorites don't apply in the casino.", severity="warning")
+            return
         watchlist = self._active_watchlist()
         sym = watchlist.selected_symbol
         if sym is None:
@@ -274,10 +292,55 @@ class StockSimApp(App):
             self._log.write(f"[dim]☆ Unpinned {sym}[/]")
 
     def action_buy(self) -> None:
+        if self._on_casino_tab():
+            self._open_casino()
+            return
         self._open_trade("buy")
 
     def action_sell(self) -> None:
+        if self._on_casino_tab():
+            self._open_casino()
+            return
         self._open_trade("sell")
+
+    def on_list_view_selected(self, event) -> None:
+        if self._on_casino_tab():
+            self._open_casino()
+
+    def _open_casino(self) -> None:
+        tab = self.query_one(CasinoTab)
+        game = tab.selected_game
+        if game is None:
+            self.bell()
+            return
+        cash = self.portfolio.cash()
+        if cash <= 0:
+            self.notify("You're broke. Go grind some stocks.", severity="warning")
+            return
+
+        title = game.title.strip()
+
+        def _on_close(delta: float | None) -> None:
+            if delta is None or delta == 0:
+                return
+            self._apply_casino_delta(delta, title)
+
+        self.push_screen(game.modal_factory(self._rng, cash), _on_close)
+
+    def _apply_casino_delta(self, delta: float, game_title: str) -> None:
+        pf = db.get_portfolio(self.conn)
+        new_cash = max(0.0, pf.cash + delta)
+        with db.transaction(self.conn):
+            db.update_portfolio(self.conn, cash=new_cash, sim_minutes=pf.sim_minutes)
+        if delta > 0:
+            self._log.write(
+                f"[bold green]🎲 {game_title}: +${delta:,.2f}[/]"
+            )
+        else:
+            self._log.write(
+                f"[bold red]🎲 {game_title}: -${abs(delta):,.2f}[/]"
+            )
+        self.query_one(PortfolioPanel).refresh_view(self.portfolio, self.prices)
 
     def _open_trade(self, side: str) -> None:
         watchlist = self._active_watchlist()
